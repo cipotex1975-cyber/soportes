@@ -4,7 +4,7 @@ from sklearn.cluster import DBSCAN
 from scipy.signal import argrelextrema
 import joblib
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 class MLService:
