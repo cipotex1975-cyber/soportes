@@ -1,0 +1,12 @@
+yfinance
+pandas
+numpy
+scikit-learn
+scipy
+matplotlib
+plotly
+joblib
+fastapi
+uvicorn
+python-multipart
+python-dotenv
