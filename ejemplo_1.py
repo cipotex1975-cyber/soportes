@@ -25,3 +25,4 @@ recommendation = ev.evaluate_price(symbol, current_price, analysis)
 
 print(f"Sugerencia para {symbol}: {recommendation['suggested_action']}")
 print(f"Sugerencia para {symbol}: {recommendation}")
+
