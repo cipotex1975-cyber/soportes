@@ -1,0 +1,60 @@
+Advanced Financial Market AI Analysis System
+This plan outlines the upgrade of the existing support/resistance detection system into an advanced, modular AI platform for market analysis (Forex, Stocks, Crypto). The system will combine classical technical analysis, supervised machine learning, deep learning (LSTMs), and reinforcement learning to provide high-accuracy trading signals and fake breakout detection.
+
+User Review Required
+IMPORTANT
+
+The implementation will introduce several new dependencies (TensorFlow, XGBoost, Stable-Baselines3). Ensure your environment has sufficient resources for training these models.
+
+NOTE
+
+The Reinforcement Learning component will initially use a simulated environment based on historical data to train the agent.
+
+Proposed Changes
+Core Infrastructure & Data
+[MODIFY] 
+data_service.py
+Support for multiple symbols in a single batch.
+Metadata storage for tickers (sector, exchange).
+Improved caching with expiration logic.
+[NEW] 
+feature_service.py
+Integration with pandas_ta for RSI, MACD, EMA, ATR.
+Custom logic for Candlestick patterns (Doji, Hammer, Engulfing).
+Volume anomaly detection.
+Machine Learning & Pattern Detection
+[MODIFY] 
+ml_service.py
+Level Strength Classification: Assigning "Weak", "Medium", "Strong", "Very Strong" based on touches, volume, and age.
+Supervised Learning: XGBoost model to predict "Bounce" vs "Breakout" vs "Fake Breakout".
+Deep Learning: LSTM model for temporal price movement prediction.
+Persistence for all model types (supervised and DL).
+[NEW] 
+rl_service.py
+Implementation of a PPO (Proximal Policy Optimization) agent using stable-baselines3.
+Custom Gym environment for trading signals.
+Training and evaluation logic for the RL agent.
+Evaluation & API
+[MODIFY] 
+evaluation_service.py
+Advanced evaluate_price function incorporating:
+Probabilities from supervised models.
+Risk assessment for fake breakouts.
+Confidence scores combining ML and technical indicators.
+Concrete action recommendations (Buy, Sell, Hold).
+[MODIFY] 
+app.py
+New endpoints:
+/train_supervised: Trigger training for XGBoost.
+/train_rl: Trigger training for the RL agent.
+/analyze_symbol: Comprehensive analysis of a ticker.
+/evaluate_price: Update to provide the detailed advanced JSON.
+Verification Plan
+Automated Tests
+pytest for indicator calculation accuracy.
+Verification of model persistence (Save/Load/Predict cycle).
+API endpoint validation for all new routes.
+Manual Verification
+Visual inspection of charts/ to verify that "Strong" levels indeed correspond to historical price rejections.
+Backtesting the RL agent on unseen historical data.
+Stress testing the API with multiple concurrent symbol requests.

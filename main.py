@@ -4,13 +4,14 @@ from services.data_service import DataService
 from services.ml_service import MLService
 from services.visualization_service import VisualizationService
 from services.evaluation_service import EvaluationService
+from services.feature_service import FeatureService
 import json
 
 def run_analysis(symbols=["EURUSD=X", "GBPUSD=X", "USDJPY=X"], period="2y", interval="1d"):
     data_service = DataService()
     ml_service = MLService()
     viz_service = VisualizationService()
-    eval_service = EvaluationService()
+    feature_service = FeatureService()
 
     results = []
 
@@ -20,10 +21,14 @@ def run_analysis(symbols=["EURUSD=X", "GBPUSD=X", "USDJPY=X"], period="2y", inte
             # 1. Fetch Data
             df = data_service.fetch_data(symbol, period=period, interval=interval)
             
-            # 2. Detect Levels
+            # 2. Add Indicators
+            df = feature_service.add_indicators(df)
+            df = feature_service.detect_patterns(df)
+            
+            # 3. Detect Levels
             analysis = ml_service.detect_levels(df, symbol)
             
-            # 3. Generate Charts
+            # 4. Generate Charts
             png_path = viz_service.save_static_chart(df, analysis)
             html_path = viz_service.save_interactive_chart(df, analysis)
             
@@ -45,15 +50,19 @@ def evaluate_current_price(symbol, tolerance=0.5):
     data_service = DataService()
     ml_service = MLService()
     eval_service = EvaluationService()
+    feature_service = FeatureService()
 
-    analysis = ml_service.load_levels(symbol)
+    df = data_service.fetch_data(symbol)
+    df = feature_service.add_indicators(df)
+    
+    analysis = ml_service.load_model(symbol, "levels")
     if not analysis:
         print(f"No previous analysis found for {symbol}. Running full analysis first...")
         run_analysis([symbol])
-        analysis = ml_service.load_levels(symbol)
+        analysis = ml_service.load_model(symbol, "levels")
 
     current_price = data_service.get_latest_price(symbol)
-    evaluation = eval_service.evaluate_price(symbol, current_price, analysis, tolerance)
+    evaluation = eval_service.evaluate_price(symbol, current_price, analysis, df, tolerance)
     
     print("\n--- Price Evaluation ---")
     print(json.dumps(evaluation, indent=2))

@@ -4,14 +4,18 @@ from typing import List, Optional
 from services.data_service import DataService
 from services.ml_service import MLService
 from services.evaluation_service import EvaluationService
+from services.feature_service import FeatureService
+from services.rl_service import RLService
 import uvicorn
 
-app = FastAPI(title="Forex AI Technical Analysis API")
+app = FastAPI(title="Advanced Financial AI Analysis API")
 
 # Initialize services
 data_service = DataService()
 ml_service = MLService()
 eval_service = EvaluationService()
+feature_service = FeatureService()
+rl_service = RLService()
 
 class AnalysisRequest(BaseModel):
     symbols: List[str] = ["EURUSD=X"]
@@ -21,44 +25,64 @@ class AnalysisRequest(BaseModel):
 class EvaluationRequest(BaseModel):
     symbol: str
     tolerance_percent: float = 0.5
+    use_model: str = "all" # 'none', 'xgboost', 'rl', 'all'
 
 @app.get("/")
 def read_root():
-    return {"message": "Forex AI Analysis API is running"}
+    return {"message": "Advanced Financial AI Analysis API is running"}
 
-@app.post("/train")
-def train_models(request: AnalysisRequest):
-    results = []
-    for symbol in request.symbols:
-        try:
-            df = data_service.fetch_data(symbol, request.period, request.interval)
-            analysis = ml_service.detect_levels(df, symbol)
-            results.append(analysis)
-        except Exception as e:
-            results.append({"symbol": symbol, "error": str(e)})
-    return results
+@app.post("/analyze_symbol")
+def analyze_symbol(request: EvaluationRequest):
+    """
+    Comprehensive analysis including indicators and ML levels.
+    """
+    try:
+        df = data_service.fetch_data(request.symbol)
+        df = feature_service.add_indicators(df)
+        df = feature_service.detect_patterns(df)
+        
+        analysis = ml_service.detect_levels(df, request.symbol)
+        current_price = data_service.get_latest_price(request.symbol)
+        
+        evaluation = eval_service.evaluate_price(
+            request.symbol, current_price, analysis, df, ml_service=ml_service, use_model=request.use_model, tolerance_percent=request.tolerance_percent
+        )
+        return evaluation
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/levels/{symbol}")
-def get_levels(symbol: str):
-    analysis = ml_service.load_levels(symbol)
-    if not analysis:
-        raise HTTPException(status_code=404, detail=f"No analysis found for {symbol}. Run /train first.")
-    return analysis
+@app.post("/train_supervised")
+def train_supervised(symbol: str):
+    """
+    Train XGBoost model for a symbol.
+    """
+    try:
+        df = data_service.fetch_data(symbol,"5y","1d")
+        df = feature_service.get_features_for_ml(df)
+        # Placeholder for target generation logic
+        y = (df['Close'].shift(-1) > df['Close']).astype(int)
+        X = df.drop(columns=['Close'])
+        ml_service.train_supervised_model(X, y, symbol)
+        return {"status": "success", "symbol": symbol}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/evaluate")
-def evaluate(request: EvaluationRequest):
-    analysis = ml_service.load_levels(request.symbol)
-    if not analysis:
-        # Try to train on the fly
-        try:
-            df = data_service.fetch_data(request.symbol)
-            analysis = ml_service.detect_levels(df, request.symbol)
-        except:
-            raise HTTPException(status_code=404, detail=f"Could not analyze {request.symbol}")
-    
-    current_price = data_service.get_latest_price(request.symbol)
-    evaluation = eval_service.evaluate_price(request.symbol, current_price, analysis, request.tolerance_percent)
-    return evaluation
+@app.post("/train_rl")
+def train_rl(symbol: str):
+    """
+    Train RL Agent for a symbol considering S/R levels.
+    """
+    try:
+        df = data_service.fetch_data(symbol, "5y", "1d")
+        df = feature_service.add_indicators(df)
+        
+        # Detectar niveles para que el agente aprenda de ellos
+        levels = ml_service.detect_levels(df, symbol)
+        
+        rl_service.train_agent(df, symbol, levels)
+        return {"status": "success", "symbol": symbol, "levels_detected": len(levels['supports']) + len(levels['resistances'])}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -23,10 +23,14 @@ class DataService:
         cache_file = os.path.join(self.data_dir, f"{symbol}_{period}_{interval}.csv")
         
         if use_cache and os.path.exists(cache_file):
-            print(f"Loading cached data for {symbol}")
-            df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
-            # Check if cache is old (optional, for now just load)
-            return df
+            # Check if cache is older than 1 day for daily data
+            file_mod_time = datetime.fromtimestamp(os.path.getmtime(cache_file))
+            if (datetime.now() - file_mod_time).days < 1:
+                print(f"Loading fresh cached data for {symbol}")
+                df = pd.read_csv(cache_file, index_col=0, parse_dates=True)
+                return df
+            else:
+                print(f"Cache expired for {symbol}, downloading...")
 
         print(f"Downloading data for {symbol}...")
         try:
@@ -46,6 +50,18 @@ class DataService:
             print(f"Error fetching data: {e}")
             raise
 
+    def fetch_multiple(self, symbols: List[str], **kwargs) -> Dict[str, pd.DataFrame]:
+        """
+        Fetch data for multiple symbols.
+        """
+        results = {}
+        for s in symbols:
+            try:
+                results[s] = self.fetch_data(s, **kwargs)
+            except Exception as e:
+                print(f"Skipping {s} due to error: {e}")
+        return results
+
     def get_latest_price(self, symbol: str) -> float:
         """
         Get the most recent closing price.
@@ -54,4 +70,4 @@ class DataService:
         data = ticker.history(period="1d")
         if data.empty:
             raise ValueError(f"Could not fetch latest price for {symbol}")
-        return data['Close'].iloc[-1]
+        return float(data['Close'].iloc[-1])
