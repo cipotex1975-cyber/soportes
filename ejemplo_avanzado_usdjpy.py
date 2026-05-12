@@ -79,6 +79,7 @@ if __name__ == "__main__":
     # py ejemplo_avanzado_usdjpy.py train_rl       -> Entrena Reinforcement Learning
     # py ejemplo_avanzado_usdjpy.py train_ml       -> Entrena XGBoost (Supervisado)
     # py ejemplo_avanzado_usdjpy.py analyze rl     -> Analiza usando solo RL
+    # py ejemplo_avanzado_usdjpy.py analyze xgboost -> Analiza usando solo XGBoost
     # py ejemplo_avanzado_usdjpy.py analyze none   -> Analiza solo con estadísticas
     
     mode = sys.argv[1] if len(sys.argv) > 1 else "analyze"

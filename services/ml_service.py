@@ -113,20 +113,28 @@ class MLService:
         self._save_model(symbol, model, "lstm")
         return model
 
-    def _save_model(self, symbol: str, model: Any, type: str):
+    def _get_model_path(self, symbol: str, type: str) -> str:
         suffix = "joblib" if type != "lstm" else "h5"
-        model_path = os.path.join(self.models_dir, f"{symbol}_{type}.{suffix}")
+        return os.path.join(self.models_dir, f"{symbol}_{type}.{suffix}")
+
+    def _save_model(self, symbol: str, model: Any, type: str):
+        model_path = self._get_model_path(symbol, type)
         if type == "lstm":
             model.save(model_path)
         else:
             joblib.dump(model, model_path)
 
+    def model_exists(self, symbol: str, type: str) -> bool:
+        model_path = self._get_model_path(symbol, type)
+        return os.path.exists(model_path)
+
     def load_model(self, symbol: str, type: str) -> Optional[Any]:
-        suffix = "joblib" if type != "lstm" else "h5"
-        model_path = os.path.join(self.models_dir, f"{symbol}_{type}.{suffix}")
-        if os.path.exists(model_path):
-            if type == "lstm":
-                import tensorflow as tf
-                return tf.keras.models.load_model(model_path)
-            return joblib.load(model_path)
-        return None
+        model_path = self._get_model_path(symbol, type)
+        if not os.path.exists(model_path):
+            print(f"[MLService] Modelo entrenado no encontrado: {model_path}")
+            return None
+
+        if type == "lstm":
+            import tensorflow as tf
+            return tf.keras.models.load_model(model_path)
+        return joblib.load(model_path)

@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from stable_baselines3 import PPO
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 class TradingEnv(gym.Env):
     """
@@ -96,8 +96,18 @@ class RLService:
         model.save(model_path)
         return model
 
-    def load_agent(self, symbol: str):
-        model_path = os.path.join(self.models_dir, f"{symbol}_ppo.zip")
-        if os.path.exists(model_path):
-            return PPO.load(model_path)
+    def _get_agent_path(self, symbol: str) -> Optional[str]:
+        base_path = os.path.join(self.models_dir, f"{symbol}_ppo")
+        zip_path = f"{base_path}.zip"
+        if os.path.exists(zip_path):
+            return zip_path
+        if os.path.exists(base_path):
+            return base_path
         return None
+
+    def load_agent(self, symbol: str):
+        model_path = self._get_agent_path(symbol)
+        if not model_path:
+            print(f"[RLService] Agente RL no encontrado para {symbol} en {self.models_dir}")
+            return None
+        return PPO.load(model_path)
