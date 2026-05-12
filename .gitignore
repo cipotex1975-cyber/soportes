@@ -1,5 +1,11 @@
 promp.txt
 implementation.txt
+*.txt
+
+services/__pycache__
+api/__pycache__
+charts/__pycache__
+logs/__pycache__
 
 charts/
 logs/
