@@ -45,12 +45,18 @@ class TradingEnv(gym.Env):
     def step(self, action):
         self.current_step += 1
         
-        done = self.current_step >= len(self.df) - 2
+        done = self.current_step >= len(self.df) - 1
         
         # Recompensa: Diferencia de precio al siguiente paso
         reward = 0
         current_close = self.df.iloc[self.current_step]['Close']
-        next_close = self.df.iloc[self.current_step + 1]['Close']
+        
+        # Verificar que no estamos fuera de los límites
+        if self.current_step + 1 < len(self.df):
+            next_close = self.df.iloc[self.current_step + 1]['Close']
+        else:
+            next_close = current_close
+        
         diff = next_close - current_close
         
         if action == 1: # Buy
