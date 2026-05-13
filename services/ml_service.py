@@ -100,9 +100,7 @@ class MLService:
     def train_supervised_model(self, X, y, symbol: str):
 
         from xgboost import XGBClassifier
-
-        from sklearn.model_selection import train_test_split
-
+        from sklearn.model_selection import TimeSeriesSplit, train_test_split
         from sklearn.metrics import (
             accuracy_score,
             precision_score,
@@ -112,9 +110,52 @@ class MLService:
             classification_report,
             roc_auc_score
         )
+        import numpy as np
 
         # ======================================
-        # Split temporal
+        # Walk-forward validation
+        # ======================================
+
+        tscv = TimeSeriesSplit(n_splits=2)
+        cv_scores = []
+
+        for train_index, val_index in tscv.split(X):
+            X_train_cv, X_val_cv = X.iloc[train_index], X.iloc[val_index]
+            y_train_cv, y_val_cv = y.iloc[train_index], y.iloc[val_index]
+
+            # Calcular scale_pos_weight
+            pos_weight = len(y_train_cv[y_train_cv == 0]) / len(y_train_cv[y_train_cv == 1])
+
+            model_cv = XGBClassifier(
+                n_estimators=1000,
+                learning_rate=0.01,
+                max_depth=4,
+                subsample=0.7,
+                colsample_bytree=0.7,
+                gamma=0.1,
+                reg_alpha=0.1,
+                reg_lambda=1.0,
+                scale_pos_weight=pos_weight,
+                random_state=42,
+                early_stopping_rounds=50,
+                eval_metric='auc'
+            )
+
+            model_cv.fit(
+                X_train_cv, y_train_cv,
+                eval_set=[(X_val_cv, y_val_cv)],
+                verbose=False
+            )
+
+            y_pred_cv = model_cv.predict(X_val_cv)
+            auc_cv = roc_auc_score(y_val_cv, model_cv.predict_proba(X_val_cv)[:, 1])
+            cv_scores.append(auc_cv)
+
+        print(f"CV AUC Scores: {cv_scores}")
+        print(f"Mean CV AUC: {np.mean(cv_scores):.4f}")
+
+        # ======================================
+        # Split final (temporal)
         # ======================================
 
         X_train, X_test, y_train, y_test = train_test_split(
@@ -125,16 +166,24 @@ class MLService:
         )
 
         # ======================================
-        # Modelo
+        # Modelo final
         # ======================================
 
+        pos_weight = len(y_train[y_train == 0]) / len(y_train[y_train == 1])
+
         model = XGBClassifier(
-            n_estimators=300,
-            learning_rate=0.03,
-            max_depth=6,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            random_state=42
+            n_estimators=1000,
+            learning_rate=0.01,
+            max_depth=4,
+            subsample=0.7,
+            colsample_bytree=0.7,
+            gamma=0.1,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            scale_pos_weight=pos_weight,
+            random_state=42,
+            early_stopping_rounds=50,
+            eval_metric='auc'
         )
 
         # ======================================
@@ -144,8 +193,9 @@ class MLService:
         print(f"\nEntrenando XGBoost para {symbol}...\n")
 
         model.fit(
-            X_train,
-            y_train
+            X_train, y_train,
+            eval_set=[(X_test, y_test)],
+            verbose=False
         )
 
         # ======================================
@@ -185,7 +235,7 @@ class MLService:
         print(confusion_matrix(y_test, y_pred))
 
         # ======================================
-        # Feature importance
+        # Feature importance y selección
         # ======================================
 
         feature_importance = sorted(
@@ -195,9 +245,18 @@ class MLService:
         )
 
         print("\nTop Features:")
-
         for feature, importance in feature_importance[:10]:
             print(f"{feature}: {importance:.4f}")
+
+        # Filtrar features con importancia < 0.01 para evitar overfitting
+        important_features = [f for f, imp in feature_importance if imp >= 0.01]
+        print(f"\nFeatures seleccionadas: {len(important_features)} de {len(X.columns)}")
+
+        # Re-entrenar con features seleccionadas si es necesario
+        if len(important_features) < len(X.columns):
+            X_train_sel = X_train[important_features]
+            X_test_sel = X_test[important_features]
+            model.fit(X_train_sel, y_train, eval_set=[(X_test_sel, y_test)], verbose=False)
 
         # ======================================
         # Guardar
@@ -205,7 +264,7 @@ class MLService:
 
         self._save_model(symbol, model, "xgboost")
 
-    return model
+        return model
 
 
 

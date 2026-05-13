@@ -26,7 +26,7 @@ def entrenar_agente_supervised(symbol="USDJPY=X"):
     ml_service = MLService()
 
     # 1. Obtener datos y características
-    df = data_service.fetch_data(symbol, "15y", "1d")
+    df = data_service.fetch_data(symbol, "5y", "1d")
     df = feature_service.get_features_for_ml(df)
     
     # 2. Generar Target: 1 si el precio subió mañana, 0 si bajó
@@ -51,9 +51,8 @@ def analizar_usdjpy(model_type="all"):
     df = data_service.fetch_data(symbol, period="2y", interval="1d")
     
     # 3. Aplicar Ingeniería de Características
-    df = feature_service.add_indicators(df)
-    df = feature_service.detect_patterns(df)
-
+    df = feature_service.get_features_for_ml(df)
+    
     # 4. Detectar niveles
     analysis = ml_service.detect_levels(df, symbol)
 
@@ -64,9 +63,28 @@ def analizar_usdjpy(model_type="all"):
         ml_service=ml_service, use_model=model_type
     )
 
-    # 6. Mostrar resultado final (JSON avanzado)
+    # 6. Calcular métricas de trading si hay modelo XGBoost
+    trading_metrics = {}
+    if model_type in ["xgboost", "all"] and ml_service.load_model(symbol, "xgboost"):
+        # Usar datos recientes para simular
+        test_df = df.tail(100)  # Últimos 100 días
+        X_test = test_df.drop(columns=['Close'], errors='ignore')
+        y_actual = (test_df['Close'].shift(-1) > test_df['Close']).astype(int).dropna()
+        X_test = X_test.iloc[:-1]  # Alinear con y
+        
+        model = ml_service.load_model(symbol, "xgboost")
+        predictions = model.predict_proba(X_test)[:, 1]
+        actual_returns = (test_df['Close'].shift(-1) / test_df['Close'] - 1).dropna()
+        
+        trading_metrics = eval_service.calculate_trading_metrics(predictions, actual_returns.values)
+
+    # 7. Mostrar resultado final (JSON avanzado)
     print("\n--- RESULTADO DE LA EVALUACIÓN ---")
     print(json.dumps(evaluation, indent=2))
+    
+    if trading_metrics:
+        print("\n--- MÉTRICAS DE TRADING ---")
+        print(json.dumps(trading_metrics, indent=2))
 
     # 7. Ejemplo de cómo se vería una recomendación
     if evaluation['suggested_action'] != "hold":

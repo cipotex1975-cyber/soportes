@@ -128,3 +128,48 @@ class EvaluationService:
             "models_involved": models_used if models_used else ["statistics_only"],
             "suggested_action": suggested_action
         }
+
+    def calculate_trading_metrics(self, predictions: np.array, actual_returns: np.array, threshold: float = 0.5) -> Dict[str, float]:
+        """
+        Calculate realistic trading metrics: profit factor, expectancy, Sharpe ratio, drawdown.
+        """
+        signals = (predictions > threshold).astype(int)  # 1 = buy, 0 = hold/sell
+        
+        # Simular trades: buy if signal=1, hold otherwise
+        trades = signals * actual_returns  # PnL por trade
+        
+        wins = trades[trades > 0]
+        losses = trades[trades < 0]
+        
+        if len(losses) == 0:
+            profit_factor = float('inf')
+        else:
+            profit_factor = wins.sum() / abs(losses.sum()) if len(wins) > 0 else 0
+        
+        win_rate = len(wins) / len(trades) if len(trades) > 0 else 0
+        avg_win = wins.mean() if len(wins) > 0 else 0
+        avg_loss = abs(losses.mean()) if len(losses) > 0 else 0
+        
+        expectancy = (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
+        
+        # Sharpe ratio (simulado, asumiendo risk-free=0)
+        if len(trades) > 1:
+            sharpe = trades.mean() / trades.std() * np.sqrt(252)  # Anualizado
+        else:
+            sharpe = 0
+        
+        # Max drawdown
+        cumulative = np.cumsum(trades)
+        peak = np.maximum.accumulate(cumulative)
+        drawdown = peak - cumulative
+        max_drawdown = drawdown.max()
+        
+        return {
+            "profit_factor": profit_factor,
+            "expectancy": expectancy,
+            "sharpe_ratio": sharpe,
+            "max_drawdown": max_drawdown,
+            "win_rate": win_rate,
+            "avg_win": avg_win,
+            "avg_loss": avg_loss
+        }
