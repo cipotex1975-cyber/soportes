@@ -132,12 +132,15 @@ class FeatureService:
         df = self.detect_patterns(df)
         df = self.add_advanced_features(df)
         
-        # Dropna() al final, pero ahora es más seguro porque inicializamos 
-        # con 0 las columnas críticas si el volumen falla.
-        df_cleaned = df.dropna()
+        # Estrategia de limpieza mejorada:
+        # 1. Primero rellenar forward (ffill) los valores iniciales NaN de indicadores
+        # 2. Luego backward fill (bfill) para los finales
+        # 3. Finalmente fillna(0) para cualquier NaN restante
         
-        if len(df_cleaned) == 0:
-            print("[Warning] Dataset vacío tras dropna. Reintentando con fillna(0).")
+        df = df.ffill().bfill().fillna(0)
+        
+        if len(df) == 0:
+            print("[Warning] Dataset vacío tras limpieza. Retornando copia con fillna(0).")
             return df.fillna(0)
             
-        return df_cleaned
+        return df

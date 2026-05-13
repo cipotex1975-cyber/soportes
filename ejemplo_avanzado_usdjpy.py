@@ -1,4 +1,5 @@
 import json
+import pandas as pd
 from services.data_service import DataService
 from services.ml_service import MLService
 from services.feature_service import FeatureService
@@ -65,18 +66,42 @@ def analizar_usdjpy(model_type="all"):
 
     # 6. Calcular métricas de trading si hay modelo XGBoost
     trading_metrics = {}
-    if model_type in ["xgboost", "all"] and ml_service.load_model(symbol, "xgboost"):
-        # Usar datos recientes para simular
-        test_df = df.tail(100)  # Últimos 100 días
-        X_test = test_df.drop(columns=['Close'], errors='ignore')
-        y_actual = (test_df['Close'].shift(-1) > test_df['Close']).astype(int).dropna()
-        X_test = X_test.iloc[:-1]  # Alinear con y
-        
-        model = ml_service.load_model(symbol, "xgboost")
-        predictions = model.predict_proba(X_test)[:, 1]
-        actual_returns = (test_df['Close'].shift(-1) / test_df['Close'] - 1).dropna()
-        
-        trading_metrics = eval_service.calculate_trading_metrics(predictions, actual_returns.values)
+    model = ml_service.load_model(symbol, "xgboost")
+    trained_features = ml_service.load_feature_names(symbol)
+    
+    if model and trained_features:
+        try:
+            # Usar datos recientes para simular
+            test_df = df.tail(100).copy()  # Últimos 100 días
+            
+            # IMPORTANTE: Usar EXACTAMENTE las mismas features que se usaron en entrenamiento
+            # Si faltan, llenarlas con 0; si sobran, ignorarlas
+            X_test = pd.DataFrame(index=test_df.index)
+            
+            for feat in trained_features:
+                if feat in test_df.columns:
+                    X_test[feat] = test_df[feat]
+                else:
+                    # Feature no disponible en datos de análisis, llenar con promedio histórico
+                    X_test[feat] = df[feat].mean() if feat in df.columns else 0
+            
+            # Garantizar que el orden y nombre de las columnas sea exacto
+            X_test = X_test[trained_features]
+            
+            # Excluir última fila (no tiene target)
+            predictions = model.predict_proba(X_test[:-1])[:, 1]
+            actual_returns = (test_df['Close'].shift(-1) / test_df['Close'] - 1).dropna().values
+            
+            # Alinear longitudes
+            min_len = min(len(predictions), len(actual_returns))
+            predictions = predictions[:min_len]
+            actual_returns = actual_returns[:min_len]
+            
+            if len(predictions) > 0:
+                trading_metrics = eval_service.calculate_trading_metrics(predictions, actual_returns)
+                print(f"[✓ Métricas de trading calculadas: {len(predictions)} predicciones]")
+        except Exception as e:
+            print(f"[Warning] No se pudieron calcular métricas de trading: {str(e)[:100]}")
 
     # 7. Mostrar resultado final (JSON avanzado)
     print("\n--- RESULTADO DE LA EVALUACIÓN ---")

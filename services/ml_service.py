@@ -257,11 +257,21 @@ class MLService:
             X_train_sel = X_train[important_features]
             X_test_sel = X_test[important_features]
             model.fit(X_train_sel, y_train, eval_set=[(X_test_sel, y_test)], verbose=False)
+            final_features = important_features
+        else:
+            final_features = list(X.columns)
 
         # ======================================
         # Guardar
         # ======================================
 
+        # Guardar EXACTAMENTE las feature names usadas en el modelo final
+        self._save_feature_names(symbol, final_features)
+        
+        # IMPORTANTE: Desactivar validación de feature names en XGBoost para evitar mismatch
+        # en predicción con datasets diferentes
+        model.get_booster().feature_names = None
+        
         self._save_model(symbol, model, "xgboost")
 
         return model
@@ -292,6 +302,21 @@ class MLService:
     def _get_model_path(self, symbol: str, type: str) -> str:
         suffix = "joblib" if type != "lstm" else "h5"
         return os.path.join(self.models_dir, f"{symbol}_{type}.{suffix}")
+
+    def _get_features_path(self, symbol: str) -> str:
+        return os.path.join(self.models_dir, f"{symbol}_xgboost_features.joblib")
+
+    def _save_feature_names(self, symbol: str, feature_names: List[str]):
+        """Save the list of features used during training."""
+        features_path = self._get_features_path(symbol)
+        joblib.dump(feature_names, features_path)
+
+    def load_feature_names(self, symbol: str) -> Optional[List[str]]:
+        """Load the list of features used during training."""
+        features_path = self._get_features_path(symbol)
+        if not os.path.exists(features_path):
+            return None
+        return joblib.load(features_path)
 
     def _save_model(self, symbol: str, model: Any, type: str):
         model_path = self._get_model_path(symbol, type)
