@@ -1,8 +1,12 @@
 from typing import Dict, Any, Optional
 import numpy as np
 import pandas as pd
+from services.fake_breakout_service import FakeBreakoutService
 
 class EvaluationService:
+    def __init__(self):
+        self.fake_breakout_service = FakeBreakoutService()
+
     def evaluate_price(
         self, 
         symbol: str, 
@@ -32,7 +36,7 @@ class EvaluationService:
         suggested_action = "hold"
         bounce_prob = 0.5
         breakout_prob = 0.5
-        fake_breakout_risk = 0.1
+        fake_breakout_risk = 0.0
         models_used = []
 
         # 1. Base Logic (Heuristics/Statistics)
@@ -96,10 +100,19 @@ class EvaluationService:
                 zone_type = "breakout"
                 if volume_confirmation: breakout_prob += 0.1
                 suggested_action = "possible_buy" if breakout_prob > 0.6 else "wait_confirmation"
+                
+                # Calcular riesgo de fake breakout
+                breakout_level = max([l['price'] for l in resistances])
+                fake_breakout_risk = self.fake_breakout_service.calculate_fake_breakout_risk(df, breakout_level, "up")
+                
             elif supports and current_price < min([l['price'] for l in supports]):
                 zone_type = "breakout"
                 if volume_confirmation: breakout_prob += 0.1
                 suggested_action = "possible_sell" if breakout_prob > 0.6 else "wait_confirmation"
+                
+                # Calcular riesgo de fake breakout
+                breakout_level = min([l['price'] for l in supports])
+                fake_breakout_risk = self.fake_breakout_service.calculate_fake_breakout_risk(df, breakout_level, "down")
 
         return {
             "symbol": symbol,
