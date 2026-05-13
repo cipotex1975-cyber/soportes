@@ -1,0 +1,53 @@
+Forex Technical Analysis AI System Implementation Plan
+This plan outlines the development of a professional-grade Python system for detecting support and resistance levels in Forex markets using Machine Learning (DBSCAN/KMeans).
+
+User Review Required
+IMPORTANT
+
+The system will use DBSCAN for clustering by default, as it automatically determines the number of support/resistance levels based on price density, which is more robust than KMeans for this specific task.
+
+NOTE
+
+The API will be built using FastAPI as requested, providing a modern, high-performance interface for external integration.
+
+Proposed Changes
+Project Structure
+We will follow the recommended architecture:
+
+data/: Cached CSV data.
+models/: Persisted ML models.
+charts/: Generated PNG and HTML reports.
+logs/: System logs.
+services/: Core logic (Data, ML, Viz, Evaluation).
+api/: FastAPI routes and schemas.
+utils/: Helper functions.
+main.py: Entry point.
+Core Components
+1. Data Service [NEW]
+File: services/data_service.py
+Responsibility: Interface with yfinance to download historical data.
+Features: Caching, custom periods/timeframes, and data cleaning.
+2. ML Service [NEW]
+File: services/ml_service.py
+Responsibility:
+Identify local pivots (min/max).
+Apply clustering (DBSCAN) to group price pivots into significant levels.
+Calculate confidence scores based on cluster density and volume (if available).
+Persistence: Save/load results using joblib.
+3. Evaluation Service [NEW]
+File: services/evaluation_service.py
+Responsibility: Implement evaluate_price logic to determine proximity to levels and suggest actions (Buy/Sell/Wait).
+4. Visualization Service [NEW]
+File: services/visualization_service.py
+Responsibility: Generate Matplotlib charts (static) and Plotly (interactive HTML).
+5. API Layer [NEW]
+File: api/app.py & api/routes.py
+Responsibility: Expose FastAPI endpoints for training and evaluation.
+Verification Plan
+Automated Tests
+Scripted verification of data download integrity.
+Unit tests for clustering logic to ensure levels are correctly identified from dummy data.
+API endpoint validation using httpx or FastAPI TestClient.
+Manual Verification
+Visual inspection of generated charts/ to ensure S/R levels align with historical price action.
+Testing the evaluate_price function with real-time Forex quotes.

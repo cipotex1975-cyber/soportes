@@ -1,0 +1,207 @@
+Implementar un sistema de cálculo de fake_breakout_risk dentro del motor de evaluación de trading, con el objetivo de estimar la probabilidad de que una ruptura de soporte o resistencia sea falsa (fake breakout).
+
+Objetivo
+
+El sistema deberá analizar múltiples factores técnicos y de contexto para determinar si un breakout tiene alta probabilidad de fallar y regresar al rango anterior.
+
+El resultado deberá ser un valor numérico entre:
+
+0.0 → breakout fuerte y confiable
+1.0 → alta probabilidad de fake breakout
+
+Requerimientos funcionales
+
+El cálculo de fake_breakout_risk deberá combinar múltiples señales técnicas mediante un sistema de scoring acumulativo.
+
+1. Confirmación por volumen
+Objetivo
+
+Validar si la ruptura ocurre con volumen suficiente.
+
+Lógica
+Calcular media móvil de volumen de 20 períodos.
+Comparar el volumen actual contra la media.
+Regla
+
+Si el volumen actual es menor al promedio:
+
+fake_breakout_score += 0.25
+
+Interpretación
+
+Breakouts sin volumen tienen mayor probabilidad de ser falsos.
+
+2. Tiempo fuera del rango
+Objetivo
+
+Detectar si el precio logra mantenerse fuera de la zona rota.
+
+Lógica
+Verificar cuántas velas consecutivas permanecen fuera del soporte/resistencia.
+Si el precio regresa rápidamente al rango, aumentar el riesgo.
+Regla sugerida
+if candles_outside_zone < 2:
+    fake_breakout_score += 0.30
+
+Interpretación
+
+Los fake breakouts suelen regresar rápidamente al rango original.
+
+3. Fuerza de la ruptura
+Objetivo
+
+Medir qué tan fuerte fue el breakout.
+
+Lógica
+
+Calcular distancia porcentual entre:
+
+precio actual,
+nivel roto.
+Fórmula
+breakout_strength = abs(current_price - breakout_level) / breakout_level
+
+Regla
+if breakout_strength < 0.001:
+    fake_breakout_score += 0.15
+
+Interpretación
+
+Rupturas demasiado pequeñas suelen ser falsas.
+
+4. Divergencia RSI
+Objetivo
+
+Detectar debilidad del movimiento.
+
+Escenario bajista
+precio hace nuevo máximo,
+RSI hace máximo menor.
+Escenario alcista
+precio hace nuevo mínimo,
+RSI hace mínimo mayor.
+Regla
+if bearish_divergence or bullish_divergence:
+    fake_breakout_score += 0.20
+
+Interpretación
+
+Las divergencias suelen anticipar agotamiento.
+
+5. Confirmación MACD
+Objetivo
+
+Validar momentum real de ruptura.
+
+Lógica
+verificar cruce MACD,
+verificar aceleración positiva/negativa,
+detectar divergencia.
+Regla
+if macd_not_confirmed:
+    fake_breakout_score += 0.15
+
+Interpretación
+
+Breakouts sin momentum suelen fallar.
+
+6. Patrones de velas japonesas
+Objetivo
+
+Detectar rechazo del precio.
+
+Patrones relevantes
+Shooting Star
+Pin Bar
+Doji
+Bearish Engulfing
+Bullish Engulfing
+Regla
+if rejection_candle_detected:
+    fake_breakout_score += 0.25
+
+Interpretación
+
+Velas de rechazo indican posible falsa ruptura.
+
+7. Momentum del precio
+Objetivo
+
+Validar aceleración posterior al breakout.
+
+Lógica
+medir velocidad del movimiento,
+comparar retornos recientes,
+evaluar continuidad.
+Regla
+if momentum_is_weak:
+    fake_breakout_score += 0.10
+
+8. Normalización del score
+Objetivo
+
+Mantener el resultado entre 0 y 1.
+
+Fórmula
+fake_breakout_risk = min(fake_breakout_score, 1.0)
+
+9. Interpretación del resultado
+Riesgo	Interpretación
+0.0 - 0.2	Breakout fuerte
+0.2 - 0.4	Breakout aceptable
+0.4 - 0.6	Breakout dudoso
+0.6 - 0.8	Alta probabilidad fake breakout
+0.8 - 1.0	Fake breakout muy probable
+10. Integración en EvaluationService
+
+El cálculo deberá integrarse dentro de:
+
+EvaluationService.evaluate_price()
+
+
+y formar parte de la respuesta final:
+
+{
+  "fake_breakout_risk": 0.72
+}
+
+11. Requerimientos técnicos
+
+El sistema deberá:
+
+ser modular,
+desacoplado,
+reutilizable,
+fácil de extender,
+preparado para futura integración con modelos IA.
+12. Arquitectura recomendada
+
+Crear un servicio independiente:
+
+services/fake_breakout_service.py
+
+
+con métodos como:
+
+calculate_fake_breakout_risk()
+detect_rsi_divergence()
+detect_rejection_candle()
+evaluate_volume_confirmation()
+
+13. Objetivo final
+
+Construir un motor híbrido de detección de fake breakouts basado en:
+
+análisis técnico,
+estadísticas,
+momentum,
+volumen,
+patrones de velas,
+confirmación de indicadores,
+
+que pueda evolucionar posteriormente hacia:
+
+XGBoost,
+LSTM,
+reinforcement learning,
+sistemas probabilísticos avanzados.

@@ -1,0 +1,216 @@
+Crear un programa profesional en Python orientado al análisis técnico de mercados Forex utilizando librerías de inteligencia artificial y machine learning para detectar automáticamente niveles de soporte y resistencia en pares de divisas.
+
+Objetivo General
+
+El sistema deberá descargar datos históricos financieros, entrenar un modelo inteligente capaz de identificar soportes y resistencias relevantes, generar visualizaciones gráficas y exponer mecanismos reutilizables para ser invocados desde otros programas o sistemas de trading.
+
+Requerimientos Funcionales
+1. Descarga de datos históricos
+Utilizar la librería yfinance como fuente principal de datos.
+Trabajar con timeframe diario (1d).
+Analizar por defecto los últimos 2 años de información histórica.
+Permitir que el usuario pueda personalizar:
+período histórico,
+timeframe,
+lista/arreglo de pares de divisas.
+Ejemplo de entrada
+symbols = ["EURUSD=X", "GBPUSD=X", "USDJPY=X"]
+period = "2y"
+interval = "1d"
+
+2. Procesamiento y análisis técnico
+
+El sistema deberá:
+
+Limpiar y preparar los datos históricos.
+Detectar máximos y mínimos relevantes.
+Identificar automáticamente niveles de:
+soporte,
+resistencia,
+zonas de consolidación.
+Técnicas sugeridas
+
+Implementar una combinación de:
+
+Detección de pivotes locales.
+Clustering de precios:
+KMeans,
+DBSCAN,
+o algoritmos equivalentes.
+Validación estadística de niveles.
+Opcionalmente utilizar modelos de machine learning para mejorar la precisión.
+Librerías sugeridas
+pandas
+numpy
+scikit-learn
+scipy
+matplotlib
+plotly
+yfinance
+joblib
+
+3. Entrenamiento y persistencia del modelo
+
+El sistema deberá:
+
+Entrenar el modelo automáticamente.
+Guardar el modelo entrenado en disco para reutilización futura.
+Evitar reentrenamientos innecesarios.
+Permitir actualización incremental de datos.
+Persistencia sugerida
+models/
+data/
+charts/
+logs/
+
+
+Utilizar:
+
+joblib
+pickle
+o formato equivalente.
+4. Salida de resultados
+
+El sistema deberá retornar una estructura organizada con:
+
+símbolo,
+soportes detectados,
+resistencias detectadas,
+fecha de análisis,
+nivel de confianza,
+metadata estadística.
+Ejemplo de salida
+[
+  {
+    "symbol": "EURUSD=X",
+    "supports": [1.0710, 1.0650],
+    "resistances": [1.0920, 1.1010],
+    "confidence": 0.91,
+    "analysis_date": "2026-05-11"
+  }
+]
+
+5. Generación de gráficas
+
+Generar automáticamente gráficos para cada par de divisas analizado.
+
+Los gráficos deberán incluir:
+precio histórico,
+medias móviles opcionales,
+soportes detectados,
+resistencias detectadas,
+zonas resaltadas,
+puntos pivote.
+Requerimientos adicionales
+Guardar imágenes automáticamente.
+Utilizar nombres descriptivos.
+Ejemplo
+charts/EURUSD_2Y_2026-05-11.png
+
+Organizar los archivos por fecha o símbolo.
+Permitir exportación en PNG y HTML interactivo.
+6. API o módulo reutilizable
+
+Luego del entrenamiento, el sistema deberá poder ser invocado desde otros programas.
+
+Objetivo
+
+Determinar si el precio actual se encuentra:
+
+cerca de un soporte,
+cerca de una resistencia,
+dentro de un rango importante,
+o ante una posible ruptura (breakout).
+7. Función principal de evaluación
+
+Crear una función o endpoint reutilizable.
+
+Entrada esperada
+evaluate_price(
+    symbol="EURUSD=X",
+    current_price=1.0845,
+    tolerance_percent=0.5
+)
+
+El sistema deberá evaluar:
+distancia al soporte más cercano,
+distancia a la resistencia más cercana,
+si el precio está:
+en zona de compra,
+en zona de venta,
+neutral,
+o breakout.
+8. Respuesta estructurada
+Ejemplo JSON
+{
+  "symbol": "EURUSD=X",
+  "current_price": 1.0845,
+  "zone_type": "support",
+  "nearest_level": 1.0830,
+  "distance_percent": 0.14,
+  "confidence": 0.91,
+  "suggested_action": "possible_buy"
+}
+
+9. Arquitectura recomendada
+project/
+│
+├── data/
+├── models/
+├── charts/
+├── logs/
+├── services/
+├── api/
+├── utils/
+├── main.py
+└── requirements.txt
+
+10. API REST opcional
+
+Implementar una API REST utilizando FastAPI.
+
+Endpoints sugeridos
+Entrenar modelo
+POST /train
+
+Obtener soportes y resistencias
+GET /levels/{symbol}
+
+Evaluar precio actual
+POST /evaluate
+
+11. Requerimientos de calidad
+
+El código deberá:
+
+estar modularizado,
+documentado,
+tipado con type hints,
+seguir buenas prácticas,
+incluir manejo de errores,
+incluir logging,
+ser escalable y mantenible.
+12. Requerimientos adicionales opcionales
+
+Agregar soporte futuro para:
+
+múltiples timeframes,
+criptomonedas,
+acciones,
+alertas automáticas,
+integración con MetaTrader,
+Telegram,
+Discord,
+backtesting,
+generación de señales,
+análisis en tiempo real mediante websockets.
+Resultado Esperado
+
+El resultado final debe ser un sistema inteligente reutilizable capaz de:
+
+Descargar datos financieros.
+Detectar soportes y resistencias automáticamente.
+Entrenar y reutilizar modelos IA.
+Generar gráficos y reportes.
+Ser invocado desde otros sistemas.
+Evaluar precios actuales para apoyar decisiones de trading automatizado o semiautomatizado.
