@@ -12,7 +12,7 @@ def entrenar_agente_rl(symbol="USDJPY=X"):
     ml_service = MLService()
     rl_service = RLService()
 
-    df = data_service.fetch_data(symbol, "5y", "1d")
+    df = data_service.fetch_data(symbol, "15y", "1d")
     df = feature_service.add_indicators(df)
     levels = ml_service.detect_levels(df, symbol)
     
@@ -26,7 +26,7 @@ def entrenar_agente_supervised(symbol="USDJPY=X"):
     ml_service = MLService()
 
     # 1. Obtener datos y características
-    df = data_service.fetch_data(symbol, "5y", "1d")
+    df = data_service.fetch_data(symbol, "15y", "1d")
     df = feature_service.get_features_for_ml(df)
     
     # 2. Generar Target: 1 si el precio subió mañana, 0 si bajó

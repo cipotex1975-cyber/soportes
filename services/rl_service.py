@@ -3,6 +3,8 @@ from gymnasium import spaces
 import numpy as np
 import pandas as pd
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
+from stable_baselines3.common.evaluation import evaluate_policy
 import os
 from typing import Dict, Any, Optional
 
@@ -273,6 +275,13 @@ class RLService:
         # =====================================
         # Modelo PPO
         # =====================================
+        tensorboard_log = None
+        try:
+            import tensorboard  # type: ignore
+            tensorboard_log = "./tensorboard_logs/"
+        except ImportError:
+            print("[RLService] TensorBoard no instalado; entrenamiento continuará sin logs de TensorBoard.")
+
         model = PPO(
             policy="MlpPolicy",
             env=env,
@@ -284,7 +293,7 @@ class RLService:
             gae_lambda=0.95,
             ent_coef=0.005,
             clip_range=0.2,
-            tensorboard_log="./tensorboard_logs/"
+            tensorboard_log=tensorboard_log
         )
 
         print(f"\nEntrenando agente RL para {symbol}...\n")
