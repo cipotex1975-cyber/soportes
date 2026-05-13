@@ -71,7 +71,13 @@ def evaluate_current_price(symbol, tolerance=0.5):
         tolerance_percent=tolerance
     )
     
+    # 5. Generate fresh charts for this evaluation
+    viz_service = VisualizationService()
+    png_path = viz_service.save_static_chart(df, analysis)
+    html_path = viz_service.save_interactive_chart(df, analysis)
+    
     print("\n--- Price Evaluation ---")
+    print(f"Charts updated: {png_path}, {html_path}")
     print(json.dumps(evaluation, indent=2))
     return evaluation
 

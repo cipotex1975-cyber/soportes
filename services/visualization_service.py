@@ -24,11 +24,11 @@ class VisualizationService:
         
         # Plot supports
         for sup in analysis['supports']:
-            plt.axhline(y=sup, color='green', linestyle='--', alpha=0.5)
+            plt.axhline(y=sup['price'], color='green', linestyle='--', alpha=0.5)
         
         # Plot resistances
         for res in analysis['resistances']:
-            plt.axhline(y=res, color='red', linestyle='--', alpha=0.5)
+            plt.axhline(y=res['price'], color='red', linestyle='--', alpha=0.5)
 
         plt.title(f"Technical Analysis: {symbol} (S/R Detection)")
         plt.legend(['Close Price', 'Support', 'Resistance'])
@@ -60,13 +60,13 @@ class VisualizationService:
 
         # Add support lines
         for sup in analysis['supports']:
-            fig.add_hline(y=sup, line_dash="dash", line_color="green", 
-                         annotation_text=f"Support: {sup:.4f}")
+            fig.add_hline(y=sup['price'], line_dash="dash", line_color="green", 
+                         annotation_text=f"Support: {sup['price']:.4f}")
 
         # Add resistance lines
         for res in analysis['resistances']:
-            fig.add_hline(y=res, line_dash="dash", line_color="red", 
-                         annotation_text=f"Resistance: {res:.4f}")
+            fig.add_hline(y=res['price'], line_dash="dash", line_color="red", 
+                         annotation_text=f"Resistance: {res['price']:.4f}")
 
         fig.update_layout(
             title=f"Forex AI Analysis - {symbol}",
