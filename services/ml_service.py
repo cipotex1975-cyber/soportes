@@ -82,15 +82,118 @@ class MLService:
         self._save_model(symbol, result, "levels")
         return result
 
-    def train_supervised_model(self, X: pd.DataFrame, y: pd.Series, symbol: str):
-        """
-        Train an XGBoost model to predict bounce/breakout.
-        """
+    
+    def train_supervised_model(self, X, y, symbol: str):
+
         from xgboost import XGBClassifier
-        model = XGBClassifier(n_estimators=100, learning_rate=0.05)
-        model.fit(X, y)
+
+        from sklearn.model_selection import train_test_split
+
+        from sklearn.metrics import (
+            accuracy_score,
+            precision_score,
+            recall_score,
+            f1_score,
+            confusion_matrix,
+            classification_report,
+            roc_auc_score
+        )
+
+        # ======================================
+        # Split temporal
+        # ======================================
+
+        X_train, X_test, y_train, y_test = train_test_split(
+            X,
+            y,
+            test_size=0.2,
+            shuffle=False
+        )
+
+        # ======================================
+        # Modelo
+        # ======================================
+
+        model = XGBClassifier(
+            n_estimators=300,
+            learning_rate=0.03,
+            max_depth=6,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            random_state=42
+        )
+
+        # ======================================
+        # Entrenamiento
+        # ======================================
+
+        print(f"\nEntrenando XGBoost para {symbol}...\n")
+
+        model.fit(
+            X_train,
+            y_train
+        )
+
+        # ======================================
+        # Predicciones
+        # ======================================
+
+        y_pred = model.predict(X_test)
+
+        y_prob = model.predict_proba(X_test)[:, 1]
+
+        # ======================================
+        # Métricas
+        # ======================================
+
+        accuracy = accuracy_score(y_test, y_pred)
+
+        precision = precision_score(y_test, y_pred)
+
+        recall = recall_score(y_test, y_pred)
+
+        f1 = f1_score(y_test, y_pred)
+
+        auc = roc_auc_score(y_test, y_prob)
+
+        print("\n==============================")
+        print(f"Accuracy : {accuracy:.4f}")
+        print(f"Precision: {precision:.4f}")
+        print(f"Recall   : {recall:.4f}")
+        print(f"F1 Score : {f1:.4f}")
+        print(f"ROC AUC  : {auc:.4f}")
+        print("==============================\n")
+
+        print("Classification Report:\n")
+        print(classification_report(y_test, y_pred))
+
+        print("Confusion Matrix:\n")
+        print(confusion_matrix(y_test, y_pred))
+
+        # ======================================
+        # Feature importance
+        # ======================================
+
+        feature_importance = sorted(
+            zip(X.columns, model.feature_importances_),
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        print("\nTop Features:")
+
+        for feature, importance in feature_importance[:10]:
+            print(f"{feature}: {importance:.4f}")
+
+        # ======================================
+        # Guardar
+        # ======================================
+
         self._save_model(symbol, model, "xgboost")
-        return model
+
+    return model
+
+
 
     def train_lstm_model(self, data: np.array, symbol: str):
         """
