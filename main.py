@@ -62,7 +62,14 @@ def evaluate_current_price(symbol, tolerance=0.5):
         analysis = ml_service.load_model(symbol, "levels")
 
     current_price = data_service.get_latest_price(symbol)
-    evaluation = eval_service.evaluate_price(symbol, current_price, analysis, df, tolerance)
+    evaluation = eval_service.evaluate_price(
+        symbol, 
+        current_price, 
+        analysis, 
+        df, 
+        ml_service=ml_service, 
+        tolerance_percent=tolerance
+    )
     
     print("\n--- Price Evaluation ---")
     print(json.dumps(evaluation, indent=2))
