@@ -1,6 +1,4 @@
-promp.txt
-implementation.txt
-*.txt
+.txt
 
 services/__pycache__
 api/__pycache__

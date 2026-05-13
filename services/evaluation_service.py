@@ -50,9 +50,10 @@ class EvaluationService:
                     fs = FeatureService()
                     X = fs.get_features_for_ml(df.tail(5)).tail(1).drop(columns=['Close'], errors='ignore')
                     prediction = xgb_model.predict(X)[0]
+                    #1 = rebote 0 = ruptura
                     if prediction == 1: bounce_prob += 0.15
                     else: breakout_prob += 0.15
-                    models_used.append("xgboost")
+                    models_used.append("xgboost") #Guarda modelos usados
                 except: pass
 
         # 3. RL Model Logic (PPO Agent)
