@@ -17,16 +17,22 @@ class MLService:
         """
         Detect support and resistance levels with enhanced strength classification.
         """
-        # 1. Find local pivots
-        df['min'] = df.iloc[argrelextrema(df.Low.values, np.less_equal, order=window)[0]]['Low']
-        df['max'] = df.iloc[argrelextrema(df.High.values, np.greater_equal, order=window)[0]]['High']
+        df_copy = df.copy()
+
+        # 1. Find local pivots without mutating the original dataset
+        df_copy['min'] = np.nan
+        df_copy['max'] = np.nan
+        min_idx = argrelextrema(df_copy.Low.values, np.less_equal, order=window)[0]
+        max_idx = argrelextrema(df_copy.High.values, np.greater_equal, order=window)[0]
+        df_copy.iloc[min_idx, df_copy.columns.get_loc('min')] = df_copy['Low'].iloc[min_idx].values
+        df_copy.iloc[max_idx, df_copy.columns.get_loc('max')] = df_copy['High'].iloc[max_idx].values
         
         pivots = []
-        for i in range(len(df)):
-            if not np.isnan(df['min'].iloc[i]):
-                pivots.append({'price': df['min'].iloc[i], 'index': i, 'vol': df['Volume'].iloc[i] if 'Volume' in df.columns else 1})
-            if not np.isnan(df['max'].iloc[i]):
-                pivots.append({'price': df['max'].iloc[i], 'index': i, 'vol': df['Volume'].iloc[i] if 'Volume' in df.columns else 1})
+        for i in range(len(df_copy)):
+            if not np.isnan(df_copy['min'].iloc[i]):
+                pivots.append({'price': df_copy['min'].iloc[i], 'index': i, 'vol': df_copy['Volume'].iloc[i] if 'Volume' in df_copy.columns else 1})
+            if not np.isnan(df_copy['max'].iloc[i]):
+                pivots.append({'price': df_copy['max'].iloc[i], 'index': i, 'vol': df_copy['Volume'].iloc[i] if 'Volume' in df_copy.columns else 1})
 
         if len(pivots) < 3:
             return {"supports": [], "resistances": [], "confidence": 0}
@@ -34,7 +40,7 @@ class MLService:
         pivot_prices = np.array([p['price'] for p in pivots]).reshape(-1, 1)
         
         # 2. Clustering with DBSCAN
-        price_range = df['High'].max() - df['Low'].min()
+        price_range = df_copy['High'].max() - df_copy['Low'].min()
         eps = price_range * 0.015 
         db = DBSCAN(eps=eps, min_samples=2).fit(pivot_prices)
         
@@ -46,13 +52,21 @@ class MLService:
 
         levels = []
         current_time = datetime.now()
+        volume_mean = 0.0
+        if 'Volume' in df_copy.columns:
+            volume_mean = df_copy['Volume'].mean()
+            if np.isnan(volume_mean):
+                volume_mean = 0.0
+
         for cluster in clusters.values():
             avg_price = np.mean([p['price'] for p in cluster])
             touches = len(cluster)
             total_vol = sum([p['vol'] for p in cluster])
             
             # Strength classification
-            strength_score = touches * (1 + (total_vol / df['Volume'].mean() if 'Volume' in df.columns else 0))
+            volume_factor = total_vol / volume_mean if volume_mean > 0 else 0.0
+            strength_score = touches * (1 + volume_factor)
+
             if strength_score > 10: strength = "very strong"
             elif strength_score > 5: strength = "strong"
             elif strength_score > 2: strength = "medium"
