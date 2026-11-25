@@ -1,0 +1,155 @@
+//@version=5
+indicator("XAUUSD MTF S/R (4H) + Rechazo (15M) + Entrada (5M)", overlay=true, max_boxes_count=50, max_lines_count=100, max_labels_count=100)
+
+// ============================================================================
+// 1. INPUTS
+// ============================================================================
+grpSR = "1. Zonas S/R (4H)"
+pivotLen4H     = input.int(5, "Longitud de Pivote (4H)", minval=2, maxval=20, group=grpSR)
+atrMultZone    = input.float(0.5, "Ancho de Zona (x ATR 4H)", minval=0.1, step=0.1, group=grpSR)
+maxZones       = input.int(6, "Máximo de Zonas Activas por Tipo", minval=1, maxval=15, group=grpSR)
+showZones      = input.bool(true, "Mostrar Zonas 4H", group=grpSR)
+
+grpRej = "2. Alarma de Rechazo (15M)"
+wickRatio      = input.float(2.0, "Ratio Mecha / Cuerpo mínimo", minval=1.0, step=0.2, group=grpRej)
+enable15mAlert = input.bool(true, "Activar Alerta de Rechazo 15M", group=grpRej)
+
+grpEnt = "3. Ajuste de Entrada (5M)"
+validWindow5m  = input.int(6, "Ventana de confirmación (velas 5M tras rechazo 15M)", minval=1, maxval=24, group=grpEnt)
+rrRatio        = input.float(2.0, "Ratio Riesgo/Beneficio (TP)", minval=1.0, step=0.5, group=grpEnt)
+slBufferAtr    = input.float(0.3, "Buffer SL (x ATR 5M)", minval=0.0, step=0.1, group=grpEnt)
+enable5mAlert  = input.bool(true, "Activar Alerta de Entrada 5M", group=grpEnt)
+
+grpSes = "4. Filtro de Horario (El Salvador GMT-6)"
+useSession     = input.bool(true, "Operar solo en horario de sesión", group=grpSes)
+sessionRange   = input.session("0800-1700", "Horario (08:00 - 17:00)", group=grpSes)
+bool inSession = not useSession or not na(time(timeframe.period, sessionRange, "America/El_Salvador"))
+
+// ============================================================================
+// 2. DETECCIÓN DE SOPORTES Y RESISTENCIAS EN 4H
+// ============================================================================
+[h4_high, h4_low, h4_close, h4_atr] = request.security(syminfo.tickerid, "240", [high, low, close, ta.atr(14)], lookahead=barmerge.lookahead_off)
+
+ph4 = request.security(syminfo.tickerid, "240", ta.pivothigh(high, pivotLen4H, pivotLen4H), lookahead=barmerge.lookahead_off)
+pl4 = request.security(syminfo.tickerid, "240", ta.pivotlow(low, pivotLen4H, pivotLen4H), lookahead=barmerge.lookahead_off)
+
+var float[] resTop    = array.new_float()
+var float[] resBot    = array.new_float()
+var box[]   resBoxes  = array.new_box()
+
+var float[] supTop    = array.new_float()
+var float[] supBot    = array.new_float()
+var box[]   supBoxes  = array.new_box()
+
+// Agregar nueva resistencia 4H
+if not na(ph4) and (na(ph4[1]) or ph4 != ph4[1])
+    float top = ph4 + h4_atr * atrMultZone * 0.5
+    float bot = ph4 - h4_atr * atrMultZone * 0.5
+    array.push(resTop, top)
+    array.push(resBot, bot)
+    if showZones
+        b = box.new(bar_index, top, bar_index + 50, bot, border_color=color.new(color.red, 40), bgcolor=color.new(color.red, 85), extend=extend.right)
+        array.push(resBoxes, b)
+    if array.size(resTop) > maxZones
+        array.shift(resTop)
+        array.shift(resBot)
+        if showZones and array.size(resBoxes) > maxZones
+            box.delete(array.shift(resBoxes))
+
+// Agregar nuevo soporte 4H
+if not na(pl4) and (na(pl4[1]) or pl4 != pl4[1])
+    float top = pl4 + h4_atr * atrMultZone * 0.5
+    float bot = pl4 - h4_atr * atrMultZone * 0.5
+    array.push(supTop, top)
+    array.push(supBot, bot)
+    if showZones
+        b = box.new(bar_index, top, bar_index + 50, bot, border_color=color.new(color.green, 40), bgcolor=color.new(color.green, 85), extend=extend.right)
+        array.push(supBoxes, b)
+    if array.size(supTop) > maxZones
+        array.shift(supTop)
+        array.shift(supBot)
+        if showZones and array.size(supBoxes) > maxZones
+            box.delete(array.shift(supBoxes))
+
+// Función auxiliar: ¿el precio toca alguna zona?
+inZone(float priceHigh, float priceLow, float[] tops, float[] bots) =>
+    bool touched = false
+    int sz = array.size(tops)
+    if sz > 0
+        for i = 0 to sz - 1
+            float t = array.get(tops, i)
+            float b = array.get(bots, i)
+            if priceHigh >= b and priceLow <= t
+                touched := true
+                break
+    touched
+
+// ============================================================================
+// 3. DETECCIÓN DE RECHAZO EN 15M
+// ============================================================================
+[m15_open, m15_high, m15_low, m15_close, m15_time] = request.security(syminfo.tickerid, "15", [open, high, low, close, time], lookahead=barmerge.lookahead_off)
+bool isNew15m = ta.change(m15_time) != 0
+
+float m15_body      = math.max(math.abs(m15_close - m15_open), syminfo.mintick)
+float m15_upperWick = m15_high - math.max(m15_open, m15_close)
+float m15_lowerWick = math.min(m15_open, m15_close) - m15_low
+
+bool touchRes15m = inZone(m15_high, m15_low, resTop, resBot)
+bool touchSup15m = inZone(m15_high, m15_low, supTop, supBot)
+
+bool bearRej15m = inSession and isNew15m and touchRes15m and (m15_upperWick >= m15_body * wickRatio) and (m15_close < m15_open or m15_upperWick > m15_lowerWick * 2)
+bool bullRej15m = inSession and isNew15m and touchSup15m and (m15_lowerWick >= m15_body * wickRatio) and (m15_close > m15_open or m15_lowerWick > m15_upperWick * 2)
+
+plotshape(bearRej15m, title="Rechazo Bajista 15M", style=shape.triangledown, location=location.abovebar, color=color.orange, size=size.small, text="Rej 15M")
+plotshape(bullRej15m, title="Rechazo Alcista 15M", style=shape.triangleup, location=location.belowbar, color=color.aqua, size=size.small, text="Rej 15M")
+
+// Alertas 15M (formato JSON listo para Telegram Webhook)
+if enable15mAlert and bearRej15m
+    alert('{"symbol":"' + syminfo.ticker + '","tf":"15M","event":"RECHAZO_BAJISTA","price":' + str.tostring(m15_close) + '}', alert.freq_once_per_bar_close)
+
+if enable15mAlert and bullRej15m
+    alert('{"symbol":"' + syminfo.ticker + '","tf":"15M","event":"RECHAZO_ALCISTA","price":' + str.tostring(m15_close) + '}', alert.freq_once_per_bar_close)
+
+// ============================================================================
+// 4. AJUSTE DE ENTRADA EN 5M
+// ============================================================================
+var int   barsSinceBearRej = 999
+var int   barsSinceBullRej = 999
+var float rejHighLevel     = na
+var float rejLowLevel      = na
+
+if bearRej15m
+    barsSinceBearRej := 0
+    rejHighLevel     := m15_high
+else
+    barsSinceBearRej += 1
+
+if bullRej15m
+    barsSinceBullRej := 0
+    rejLowLevel      := m15_low
+else
+    barsSinceBullRej += 1
+
+float atr5m = ta.atr(14)
+
+// Confirmación 5M: vela de impulso en dirección del rechazo rompiendo el mínimo/máximo de la vela anterior
+bool confirmShort5m = inSession and barsSinceBearRej > 0 and barsSinceBearRej <= validWindow5m and close < open and close < low[1]
+bool confirmLong5m  = inSession and barsSinceBullRej > 0 and barsSinceBullRej <= validWindow5m and close > open and close > high[1]
+
+if confirmShort5m
+    barsSinceBearRej := 999
+    float sl = rejHighLevel + atr5m * slBufferAtr
+    float risk = math.max(sl - close, syminfo.mintick * 10)
+    float tp = close - risk * rrRatio
+    label.new(bar_index, high, "SHORT 5M\nE: " + str.tostring(close, format.mintick) + "\nSL: " + str.tostring(sl, format.mintick) + "\nTP: " + str.tostring(tp, format.mintick), color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
+    if enable5mAlert
+        alert('{"symbol":"' + syminfo.ticker + '","tf":"5M","event":"ENTRADA_SHORT","entry":' + str.tostring(close) + ',"sl":' + str.tostring(sl) + ',"tp":' + str.tostring(tp) + '}', alert.freq_once_per_bar_close)
+
+if confirmLong5m
+    barsSinceBullRej := 999
+    float sl = rejLowLevel - atr5m * slBufferAtr
+    float risk = math.max(close - sl, syminfo.mintick * 10)
+    float tp = close + risk * rrRatio
+    label.new(bar_index, low, "LONG 5M\nE: " + str.tostring(close, format.mintick) + "\nSL: " + str.tostring(sl, format.mintick) + "\nTP: " + str.tostring(tp, format.mintick), color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
+    if enable5mAlert
+        alert('{"symbol":"' + syminfo.ticker + '","tf":"5M","event":"ENTRADA_LONG","entry":' + str.tostring(close) + ',"sl":' + str.tostring(sl) + ',"tp":' + str.tostring(tp) + '}', alert.freq_once_per_bar_close)
