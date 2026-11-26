@@ -1,4 +1,5 @@
 import argparse
+import io
 import os
 import threading
 import time
@@ -6,6 +7,9 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
 
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import requests
@@ -53,12 +57,87 @@ def in_session(now_sv: datetime) -> bool:
     return 6 <= now_sv.hour < 20
 
 
-def send_alert(message: str) -> None:
+def generate_chart(
+    df: pd.DataFrame,
+    symbol: str,
+    title: str,
+    res_zones: list[tuple[float, float]],
+    sup_zones: list[tuple[float, float]],
+    entry: Optional[float] = None,
+    sl: Optional[float] = None,
+    tp: Optional[float] = None,
+) -> bytes:
+    """Genera un gráfico de velas legible en PNG (en memoria) para enviar por Telegram."""
+    sub = df.tail(35).reset_index(drop=True)
+    fig, ax = plt.subplots(figsize=(10, 5.5), dpi=140)
+    fig.patch.set_facecolor("#131722")
+    ax.set_facecolor("#131722")
+
+    # Velas
+    for idx, row in sub.iterrows():
+        color = "#26a69a" if row["close"] >= row["open"] else "#ef5350"
+        ax.plot([idx, idx], [row["low"], row["high"]], color=color, linewidth=1.1, zorder=2)
+        body_bot = min(row["open"], row["close"])
+        body_h = max(abs(row["close"] - row["open"]), (sub["high"].max() - sub["low"].min()) * 0.002)
+        ax.bar(idx, body_h, bottom=body_bot, width=0.6, color=color, edgecolor=color, zorder=3)
+
+    y_min = sub["low"].min()
+    y_max = sub["high"].max()
+    pad = (y_max - y_min) * 0.12
+    y_lo, y_hi = y_min - pad, y_max + pad
+
+    # Zonas 4H visibles
+    for bot, top in res_zones:
+        if top >= y_lo and bot <= y_hi:
+            ax.axhspan(bot, top, color="#ef5350", alpha=0.18, zorder=1)
+    for bot, top in sup_zones:
+        if top >= y_lo and bot <= y_hi:
+            ax.axhspan(bot, top, color="#26a69a", alpha=0.18, zorder=1)
+
+    # Niveles de Entrada, SL y TP
+    if entry is not None:
+        ax.axhline(entry, color="#2962ff", linestyle="--", linewidth=1.3, label=f"Entrada: {entry:.5f}")
+    if sl is not None:
+        ax.axhline(sl, color="#ef5350", linestyle="--", linewidth=1.3, label=f"SL: {sl:.5f}")
+    if tp is not None:
+        ax.axhline(tp, color="#26a69a", linestyle="--", linewidth=1.3, label=f"TP: {tp:.5f}")
+
+    if entry is not None or sl is not None or tp is not None:
+        ax.legend(loc="upper left", facecolor="#1e222d", edgecolor="#363a45", labelcolor="white", fontsize=9)
+
+    ax.set_title(f"{symbol} — {title}", color="white", fontsize=12, fontweight="bold", pad=10)
+    ax.tick_params(colors="#b2b5be", labelsize=8)
+    ax.grid(color="#2a2e39", linestyle=":", linewidth=0.7)
+    step = max(1, len(sub) // 6)
+    xticks = list(range(0, len(sub), step))
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([sub["datetime"].iloc[i].strftime("%m-%d %H:%M") for i in xticks], rotation=15)
+    for spine in ax.spines.values():
+        spine.set_color("#363a45")
+
+    buf = io.BytesIO()
+    plt.tight_layout()
+    fig.savefig(buf, format="png", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def send_alert(message: str, chart_bytes: Optional[bytes] = None) -> None:
     print(f"\n[ALERTA] {message}\n")
     if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
         try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=10)
+            if chart_bytes:
+                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+                requests.post(
+                    url,
+                    data={"chat_id": TELEGRAM_CHAT_ID, "caption": message},
+                    files={"photo": ("chart.png", chart_bytes, "image/png")},
+                    timeout=15,
+                )
+            else:
+                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+                requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message}, timeout=10)
         except Exception as exc:
             print(f"[ERROR Telegram] {exc}")
 
@@ -188,11 +267,13 @@ def analyze_symbol(symbol: str, state: dict) -> None:
         if bear_rej:
             sym_state["bear_rej_level"] = c15["high"]
             sym_state["bars_bear"] = 0
-            send_alert(f"🟠 RECHAZO BAJISTA 15M | {symbol} | Precio: {c15['close']}")
+            chart = generate_chart(df15m, symbol, "Rechazo Bajista 15M", res_zones, sup_zones)
+            send_alert(f"🟠 RECHAZO BAJISTA 15M | {symbol} | Precio: {c15['close']}", chart)
         if bull_rej:
             sym_state["bull_rej_level"] = c15["low"]
             sym_state["bars_bull"] = 0
-            send_alert(f"🔵 RECHAZO ALCISTA 15M | {symbol} | Precio: {c15['close']}")
+            chart = generate_chart(df15m, symbol, "Rechazo Alcista 15M", res_zones, sup_zones)
+            send_alert(f"🔵 RECHAZO ALCISTA 15M | {symbol} | Precio: {c15['close']}", chart)
 
     # Evaluar confirmación en 5M (última vela cerrada según timestamp de TwelveData)
     atr5 = calc_atr(df5m, 14).iloc[-2]
@@ -209,9 +290,11 @@ def analyze_symbol(symbol: str, state: dict) -> None:
                 risk = max(sl - c5["close"], 1e-5)
                 tp = c5["close"] - risk * RR_RATIO
                 sym_state["bars_bear"] = 999
+                chart = generate_chart(df5m, symbol, "Entrada SHORT 5M", res_zones, sup_zones, entry=c5["close"], sl=sl, tp=tp)
                 send_alert(
                     f"🔴 ENTRADA SHORT 5M | {symbol}\n"
-                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
+                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
+                    chart,
                 )
 
         if sym_state["bars_bull"] < VALID_WINDOW_5M and sym_state["bull_rej_level"] is not None:
@@ -221,9 +304,11 @@ def analyze_symbol(symbol: str, state: dict) -> None:
                 risk = max(c5["close"] - sl, 1e-5)
                 tp = c5["close"] + risk * RR_RATIO
                 sym_state["bars_bull"] = 999
+                chart = generate_chart(df5m, symbol, "Entrada LONG 5M", res_zones, sup_zones, entry=c5["close"], sl=sl, tp=tp)
                 send_alert(
                     f"🟢 ENTRADA LONG 5M | {symbol}\n"
-                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
+                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
+                    chart,
                 )
 
 
