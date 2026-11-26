@@ -1,7 +1,9 @@
 import argparse
 import os
+import threading
 import time
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
 
 import numpy as np
@@ -212,6 +214,24 @@ def analyze_symbol(symbol: str, state: dict) -> None:
             )
 
 
+def _start_health_server() -> None:
+    """Mini servidor HTTP para que Render (Web Service gratuito) mantenga el servicio activo."""
+    port = int(os.getenv("PORT", "10000"))
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    server = HTTPServer(("0.0.0.0", port), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    print(f"[HTTP] Health server escuchando en puerto {port}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Monitor MTF (4H -> 15M -> 5M) con TwelveData")
     parser.add_argument("--once", action="store_true", help="Ejecutar una sola vez y salir")
@@ -221,6 +241,9 @@ def main() -> None:
     if not TWELVEDATA_API_KEY:
         print("Error: Configura TWELVEDATA_API_KEY en tu archivo .env")
         return
+
+    if not args.once:
+        _start_health_server()
 
     state: dict = {}
     while True:
