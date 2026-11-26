@@ -286,28 +286,30 @@ def analyze_symbol(symbol: str, state: dict) -> None:
         if sym_state["bars_bear"] < VALID_WINDOW_5M and sym_state["bear_rej_level"] is not None:
             sym_state["bars_bear"] += 1
             if c5["close"] < c5["open"] and c5["close"] < prev5["low"]:
+                limit_entry = (c5["high"] + c5["low"]) / 2.0
                 sl = sym_state["bear_rej_level"] + (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
-                risk = max(sl - c5["close"], 1e-5)
-                tp = c5["close"] - risk * RR_RATIO
+                risk = max(sl - limit_entry, 1e-5)
+                tp = limit_entry - risk * RR_RATIO
                 sym_state["bars_bear"] = 999
-                chart = generate_chart(df5m, symbol, "Entrada SHORT 5M", res_zones, sup_zones, entry=c5["close"], sl=sl, tp=tp)
+                chart = generate_chart(df5m, symbol, "Sell Limit 5M", res_zones, sup_zones, entry=limit_entry, sl=sl, tp=tp)
                 send_alert(
-                    f"🔴 ENTRADA SHORT 5M | {symbol}\n"
-                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
+                    f"🔴 SELL LIMIT 5M | {symbol}\n"
+                    f"Sell Limit (50%): {limit_entry:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
                     chart,
                 )
 
         if sym_state["bars_bull"] < VALID_WINDOW_5M and sym_state["bull_rej_level"] is not None:
             sym_state["bars_bull"] += 1
             if c5["close"] > c5["open"] and c5["close"] > prev5["high"]:
+                limit_entry = (c5["high"] + c5["low"]) / 2.0
                 sl = sym_state["bull_rej_level"] - (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
-                risk = max(c5["close"] - sl, 1e-5)
-                tp = c5["close"] + risk * RR_RATIO
+                risk = max(limit_entry - sl, 1e-5)
+                tp = limit_entry + risk * RR_RATIO
                 sym_state["bars_bull"] = 999
-                chart = generate_chart(df5m, symbol, "Entrada LONG 5M", res_zones, sup_zones, entry=c5["close"], sl=sl, tp=tp)
+                chart = generate_chart(df5m, symbol, "Buy Limit 5M", res_zones, sup_zones, entry=limit_entry, sl=sl, tp=tp)
                 send_alert(
-                    f"🟢 ENTRADA LONG 5M | {symbol}\n"
-                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
+                    f"🟢 BUY LIMIT 5M | {symbol}\n"
+                    f"Buy Limit (50%): {limit_entry:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}",
                     chart,
                 )
 
