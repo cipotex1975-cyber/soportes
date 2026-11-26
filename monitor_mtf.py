@@ -50,7 +50,7 @@ def _rate_limit_guard() -> None:
 
 
 def in_session(now_sv: datetime) -> bool:
-    return 8 <= now_sv.hour < 17
+    return 6 <= now_sv.hour < 20
 
 
 def send_alert(message: str) -> None:
@@ -132,24 +132,34 @@ def analyze_symbol(symbol: str, state: dict) -> None:
         symbol,
         {
             "last_15m_time": None,
+            "last_5m_time": None,
             "bear_rej_level": None,
             "bull_rej_level": None,
             "bars_bear": 999,
             "bars_bull": 999,
             "last_4h_fetch": 0.0,
+            "last_15m_fetch": 0.0,
+            "df15m": None,
             "res_zones": [],
             "sup_zones": [],
         },
     )
 
-    # Refrescar zonas 4H solo cada 60 minutos para ahorrar peticiones
+    # Refrescar zonas 4H solo cada 60 minutos
     if time.time() - sym_state["last_4h_fetch"] >= 3600 or not sym_state["res_zones"]:
         df4h = fetch_ohlc(symbol, "4h", 120)
         if df4h is not None:
             sym_state["res_zones"], sym_state["sup_zones"] = detect_4h_zones(df4h)
             sym_state["last_4h_fetch"] = time.time()
 
-    df15m = fetch_ohlc(symbol, "15min", 40)
+    # Refrescar velas 15M cada 15 minutos (900s) para ahorrar créditos
+    if time.time() - sym_state["last_15m_fetch"] >= 900 or sym_state["df15m"] is None:
+        df15m_new = fetch_ohlc(symbol, "15min", 40)
+        if df15m_new is not None:
+            sym_state["df15m"] = df15m_new
+            sym_state["last_15m_fetch"] = time.time()
+
+    df15m = sym_state["df15m"]
     df5m = fetch_ohlc(symbol, "5min", 40)
     if df15m is None or df5m is None:
         return
@@ -184,34 +194,37 @@ def analyze_symbol(symbol: str, state: dict) -> None:
             sym_state["bars_bull"] = 0
             send_alert(f"🔵 RECHAZO ALCISTA 15M | {symbol} | Precio: {c15['close']}")
 
-    # Evaluar confirmación en 5M (última vela cerrada)
+    # Evaluar confirmación en 5M (última vela cerrada según timestamp de TwelveData)
     atr5 = calc_atr(df5m, 14).iloc[-2]
     c5 = df5m.iloc[-2]
     prev5 = df5m.iloc[-3]
 
-    if sym_state["bars_bear"] < VALID_WINDOW_5M and sym_state["bear_rej_level"] is not None:
-        sym_state["bars_bear"] += 1
-        if c5["close"] < c5["open"] and c5["close"] < prev5["low"]:
-            sl = sym_state["bear_rej_level"] + (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
-            risk = max(sl - c5["close"], 1e-5)
-            tp = c5["close"] - risk * RR_RATIO
-            sym_state["bars_bear"] = 999
-            send_alert(
-                f"🔴 ENTRADA SHORT 5M | {symbol}\n"
-                f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
-            )
+    if sym_state["last_5m_time"] != c5["datetime"]:
+        sym_state["last_5m_time"] = c5["datetime"]
 
-    if sym_state["bars_bull"] < VALID_WINDOW_5M and sym_state["bull_rej_level"] is not None:
-        sym_state["bars_bull"] += 1
-        if c5["close"] > c5["open"] and c5["close"] > prev5["high"]:
-            sl = sym_state["bull_rej_level"] - (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
-            risk = max(c5["close"] - sl, 1e-5)
-            tp = c5["close"] + risk * RR_RATIO
-            sym_state["bars_bull"] = 999
-            send_alert(
-                f"🟢 ENTRADA LONG 5M | {symbol}\n"
-                f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
-            )
+        if sym_state["bars_bear"] < VALID_WINDOW_5M and sym_state["bear_rej_level"] is not None:
+            sym_state["bars_bear"] += 1
+            if c5["close"] < c5["open"] and c5["close"] < prev5["low"]:
+                sl = sym_state["bear_rej_level"] + (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
+                risk = max(sl - c5["close"], 1e-5)
+                tp = c5["close"] - risk * RR_RATIO
+                sym_state["bars_bear"] = 999
+                send_alert(
+                    f"🔴 ENTRADA SHORT 5M | {symbol}\n"
+                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
+                )
+
+        if sym_state["bars_bull"] < VALID_WINDOW_5M and sym_state["bull_rej_level"] is not None:
+            sym_state["bars_bull"] += 1
+            if c5["close"] > c5["open"] and c5["close"] > prev5["high"]:
+                sl = sym_state["bull_rej_level"] - (atr5 * SL_BUFFER_ATR if not np.isnan(atr5) else 0)
+                risk = max(c5["close"] - sl, 1e-5)
+                tp = c5["close"] + risk * RR_RATIO
+                sym_state["bars_bull"] = 999
+                send_alert(
+                    f"🟢 ENTRADA LONG 5M | {symbol}\n"
+                    f"Entrada: {c5['close']:.5f}\nSL: {sl:.5f}\nTP: {tp:.5f}"
+                )
 
 
 def _start_health_server() -> None:
@@ -253,7 +266,7 @@ def main() -> None:
             for sym in SYMBOLS:
                 analyze_symbol(sym, state)
         else:
-            print(f"[{now_sv.strftime('%Y-%m-%d %H:%M:%S')} GMT-6] Fuera de horario (08:00-17:00). Esperando...")
+            print(f"[{now_sv.strftime('%Y-%m-%d %H:%M:%S')} GMT-6] Fuera de horario (06:00-20:00). Esperando...")
 
         if args.once:
             break
