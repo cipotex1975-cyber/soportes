@@ -30,6 +30,22 @@ SL_BUFFER_ATR = 0.3
 # Zona horaria El Salvador (GMT-6, sin horario de verano)
 EL_SALVADOR_TZ = timezone(timedelta(hours=-6))
 
+_req_timestamps: list[float] = []
+
+
+def _rate_limit_guard() -> None:
+    """Evita superar el límite gratuito de TwelveData (8 peticiones/minuto)."""
+    now = time.time()
+    _req_timestamps[:] = [t for t in _req_timestamps if now - t < 62]
+    if len(_req_timestamps) >= 7:
+        wait = 62 - (now - _req_timestamps[0])
+        if wait > 0:
+            print(f"[Rate Limit] Esperando {wait:.0f}s para no exceder 8 req/min...")
+            time.sleep(wait)
+        now = time.time()
+        _req_timestamps[:] = [t for t in _req_timestamps if now - t < 62]
+    _req_timestamps.append(time.time())
+
 
 def in_session(now_sv: datetime) -> bool:
     return 8 <= now_sv.hour < 17
@@ -52,6 +68,7 @@ def send_alert(message: str) -> None:
 
 
 def fetch_ohlc(symbol: str, interval: str, outputsize: int = 120) -> Optional[pd.DataFrame]:
+    _rate_limit_guard()
     url = "https://api.twelvedata.com/time_series"
     params = {
         "symbol": symbol,
@@ -109,13 +126,33 @@ def price_in_zones(low: float, high: float, zones: list[tuple[float, float]]) ->
 
 
 def analyze_symbol(symbol: str, state: dict) -> None:
-    df4h = fetch_ohlc(symbol, "4h", 120)
+    sym_state = state.setdefault(
+        symbol,
+        {
+            "last_15m_time": None,
+            "bear_rej_level": None,
+            "bull_rej_level": None,
+            "bars_bear": 999,
+            "bars_bull": 999,
+            "last_4h_fetch": 0.0,
+            "res_zones": [],
+            "sup_zones": [],
+        },
+    )
+
+    # Refrescar zonas 4H solo cada 60 minutos para ahorrar peticiones
+    if time.time() - sym_state["last_4h_fetch"] >= 3600 or not sym_state["res_zones"]:
+        df4h = fetch_ohlc(symbol, "4h", 120)
+        if df4h is not None:
+            sym_state["res_zones"], sym_state["sup_zones"] = detect_4h_zones(df4h)
+            sym_state["last_4h_fetch"] = time.time()
+
     df15m = fetch_ohlc(symbol, "15min", 40)
     df5m = fetch_ohlc(symbol, "5min", 40)
-    if df4h is None or df15m is None or df5m is None:
+    if df15m is None or df5m is None:
         return
 
-    res_zones, sup_zones = detect_4h_zones(df4h)
+    res_zones, sup_zones = sym_state["res_zones"], sym_state["sup_zones"]
 
     # Evaluar última vela cerrada de 15M (penúltima fila si la última está en formación)
     c15 = df15m.iloc[-2]
@@ -133,8 +170,6 @@ def analyze_symbol(symbol: str, state: dict) -> None:
         and lower_wick >= body15 * WICK_RATIO
         and (c15["close"] > c15["open"] or lower_wick > upper_wick * 2)
     )
-
-    sym_state = state.setdefault(symbol, {"last_15m_time": None, "bear_rej_level": None, "bull_rej_level": None, "bars_bear": 999, "bars_bull": 999})
 
     if sym_state["last_15m_time"] != c15["datetime"]:
         sym_state["last_15m_time"] = c15["datetime"]
